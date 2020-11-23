@@ -1,4 +1,6 @@
+emoji
 jinja2
 pandas
 seaborn
+python-telegram
 weasyprint

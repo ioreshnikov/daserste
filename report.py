@@ -3,12 +3,16 @@
 
 import argparse
 import json
+import os
 import re
 
 import emoji
 import matplotlib.pyplot as plot
 import pandas
 import seaborn
+import telegram
+
+import settings
 
 
 parser = argparse.ArgumentParser()
@@ -16,21 +20,6 @@ parser.add_argument(
     "export_data",
     help="path to the exported chat messages (a json file)",
     type=str)
-parser.add_argument(
-    "--timezone-export", "--tze",
-    help="timezone used for timestamps in the export file",
-    type=str,
-    default="Europe/Berlin")
-parser.add_argument(
-    "--timezone-display", "--tzd",
-    help="timezone used in the report",
-    type=str,
-    default="Europe/Moscow")
-parser.add_argument(
-    "--obscene-corpus", "--osc",
-    help="path to the obscenity corpus",
-    type=str,
-    default="obscene_corpus.txt")
 args = parser.parse_args()
 
 
@@ -49,7 +38,7 @@ df["date"] = pandas.to_datetime(df["date"])
 
 # A bit of preprocessing. Let us extract the swearwords. We load the
 # obscenity corpus from the external file.
-with open(args.obscene_corpus) as fd:
+with open(settings.obscene_corpus) as fd:
     obscene_corpus = set(line.strip().lower() for line in fd)
 
 # And then we go through every message and do the following:
@@ -90,6 +79,9 @@ for index, row in enumerate(df.itertuples()):
 df["emojis"] = pandas.Series(emojis_column)
 df["words"] = pandas.Series(words_column)
 df["swearwords"] = pandas.Series(swearwords_column)
+df["n_words"] = pandas.Series(len(words) for words in words_column)
+df["n_swearwords"] = pandas.Series(
+    len(swearwords) for swearwords in swearwords_column)
 
 
 # This is an empty context we are going to populate with template
@@ -151,4 +143,16 @@ context["top_swearwords"] = (
       .head(10))
 
 
-# 7. Swearword density.
+# 7. Top swearers
+swearwords_total = (
+    df[["from", "from_id", "n_words", "n_swearwords"]]
+      .groupby(["from", "from_id"])
+      .sum())
+swearwords_total = swearwords_total[swearwords_total["n_words"] > 100]
+context["top_swearers"] = (
+    (swearwords_total["n_swearwords"] / swearwords_total["n_words"])
+      .sort_values(ascending=False)
+      .head(10))
+
+
+os.makedirs("report", exist_ok=True)
